@@ -164,7 +164,11 @@ function renderClient() {
     `<div class="tsdoc">`,
     renderAbout(renderComment(module.comment)),
     renderFunctions(module),
-    renderInterfaces(module),
+    renderInterfaces(module, {
+      filter: (i) => i.name === "Client",
+      renderH3: true,
+    }),
+    renderInterfaces(module, { filter: (i) => i.name !== "Client" }),
     `</div>`,
   ])
 }
@@ -282,9 +286,17 @@ function renderFunctions(module: TypeDoc.DeclarationReflection) {
   ])
 }
 
-function renderInterfaces(module: TypeDoc.DeclarationReflection) {
+function renderInterfaces(
+  module: TypeDoc.DeclarationReflection,
+  options: {
+    filter?: (i: TypeDoc.DeclarationReflection) => boolean
+    renderH3?: boolean
+  } = {},
+) {
   console.debug(` ∟renderInterfaces`)
-  const interfaces = module.getChildrenByKind(TypeDoc.ReflectionKind.Interface)
+  const interfaces = module
+    .getChildrenByKind(TypeDoc.ReflectionKind.Interface)
+    .filter(options.filter ?? (() => true))
   return interfaces.map((i) => {
     console.debug(`   ∟interface: ${i.name}`)
     const properties = i.getChildrenByKind(TypeDoc.ReflectionKind.Property)
@@ -292,56 +304,74 @@ function renderInterfaces(module: TypeDoc.DeclarationReflection) {
     return [
       `## ${i.name}`,
       `<Segment>`,
-      `<Section type="parameters">`,
-      properties.map((p) => [
-        `- <p>[<code class="key">${renderProperty(p)}</code>](#${buildLinkHash(i.name, p.name)}) ${renderType(p.type!)}</p>`,
-        flattenNestedTypes(p.type!, p.name).map(
-          ({ depth, prefix, subType }) =>
-            `${" ".repeat(depth * 2)}- <p>[<code class="key">${renderProperty(
-              subType,
-            )}</code>](#${buildLinkHash(prefix, subType.name)}) ${renderType(subType.type!)}</p>`,
-        ),
+      render(!options.renderH3, [
+        `<Section type="parameters">`,
+        properties.map((p) => [
+          `- <p>[<code class="key">${renderProperty(p)}</code>](#${buildLinkHash(i.name, p.name)}) ${renderType(p.type!)}</p>`,
+          flattenNestedTypes(p.type!, p.name).map(
+            ({ depth, prefix, subType }) =>
+              `${" ".repeat(depth * 2)}- <p>[<code class="key">${renderProperty(
+                subType,
+              )}</code>](#${buildLinkHash(prefix, subType.name)}) ${renderType(subType.type!)}</p>`,
+          ),
+        ]),
+        methods.map((m) => {
+          return `- <p>[<code class="key">${renderProperty(m)}</code>](#${buildLinkHash(i.name, m.name)}) ${renderSignatureAsType(m.signatures![0])}</p>`
+        }),
+        `</Section>`,
       ]),
-      methods.map((m) => {
-        return `- <p>[<code class="key">${renderProperty(m)}</code>](#${buildLinkHash(i.name, m.name)}) ${renderSignatureAsType(m.signatures![0])}</p>`
-      }),
-      `</Section>`,
       renderComment(i.comment),
       `</Segment>`,
-      properties.flatMap((p) => [
-        `<NestedTitle id="${buildLinkHash(i.name, p.name)}" Tag="h4" parent="${i.name}.">${renderProperty(p)}</NestedTitle>`,
-        `<Segment>`,
-        `<Section type="parameters">`,
-        `<InlineSection>`,
-        `**Type** ${renderType(p.type!)}`,
-        `</InlineSection>`,
-        `</Section>`,
-        renderComment(p.comment),
-        `</Segment>`,
-        flattenNestedTypes(p.type!, p.name).map(
-          ({ depth, prefix, subType }) => [
-            `<NestedTitle id="${buildLinkHash(prefix, subType.name)}" Tag="h5" parent="${i.name}.${prefix}.">${renderProperty(subType)}</NestedTitle>`,
-            `<Segment>`,
-            `<Section type="parameters">`,
-            `<InlineSection>`,
-            `**Type** ${renderType(subType.type!)}`,
-            `</InlineSection>`,
-            `</Section>`,
-            renderComment(subType.comment),
-            `</Segment>`,
-          ],
-        ),
+      render(!options.renderH3, [
+        properties.flatMap((p) => [
+          `<NestedTitle id="${buildLinkHash(i.name, p.name)}" Tag="h4" parent="${i.name}.">${renderProperty(p)}</NestedTitle>`,
+          `<Segment>`,
+          `<Section type="parameters">`,
+          `<InlineSection>`,
+          `**Type** ${renderType(p.type!)}`,
+          `</InlineSection>`,
+          `</Section>`,
+          renderComment(p.comment),
+          `</Segment>`,
+          flattenNestedTypes(p.type!, p.name).map(
+            ({ depth, prefix, subType }) => [
+              `<NestedTitle id="${buildLinkHash(prefix, subType.name)}" Tag="h5" parent="${i.name}.${prefix}.">${renderProperty(subType)}</NestedTitle>`,
+              `<Segment>`,
+              `<Section type="parameters">`,
+              `<InlineSection>`,
+              `**Type** ${renderType(subType.type!)}`,
+              `</InlineSection>`,
+              `</Section>`,
+              renderComment(subType.comment),
+              `</Segment>`,
+            ],
+          ),
+        ]),
+        methods.flatMap((m) => [
+          `<NestedTitle id="${buildLinkHash(i.name, m.name)}" Tag="h4" parent="${i.name}.">${renderProperty(m)}</NestedTitle>`,
+          `<Segment>`,
+          `<Section type="parameters">`,
+          `<InlineSection>`,
+          `**Type** ${renderSignatureAsType(m.signatures![0])}`,
+          `</InlineSection>`,
+          `</Section>`,
+          renderComment(m.signatures![0].comment),
+          `</Segment>`,
+        ]),
       ]),
-      methods.flatMap((m) => [
-        `<NestedTitle id="${buildLinkHash(i.name, m.name)}" Tag="h4" parent="${i.name}.">${renderProperty(m)}</NestedTitle>`,
-        `<Segment>`,
-        `<Section type="parameters">`,
-        `<InlineSection>`,
-        `**Type** ${renderSignatureAsType(m.signatures![0])}`,
-        `</InlineSection>`,
-        `</Section>`,
-        renderComment(m.signatures![0].comment),
-        `</Segment>`,
+      // Note: currently only used to render the Client interface
+      render(options.renderH3, [
+        methods.flatMap((m) => [
+          `### ${m.name}`,
+          `<Segment>`,
+          `<Section type="parameters">`,
+          `<InlineSection>`,
+          `**Type** ${renderSignatureAsType(m.signatures![0])}`,
+          `</InlineSection>`,
+          `</Section>`,
+          renderComment(m.signatures![0].comment),
+          `</Segment>`,
+        ]),
       ]),
     ]
   })
